@@ -39,3 +39,18 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Documentation — keep these current
+
+Two docs are maintained by hand. Update them as part of the work, not afterwards.
+
+- `docs/ARCHITECTURE.md` — how the app is built and why. Update it whenever you add a
+  screen, change the recipe model or render pipeline, or make a decision a future reader
+  would otherwise have to reverse-engineer. Record constraints a change creates, not just
+  what it does.
+- `docs/CHANGELOG.md` — a dated work log, newest first. Add an entry for every session that
+  changes behavior. Say what changed and why; link to `ARCHITECTURE.md` for detail rather
+  than duplicating it. Keep the "Open questions" section at the bottom honest.
+
+`docs/BrewPrint_App_Plan.docx` is the original product plan. Treat it as the source of
+product intent, not as a spec that has been implemented.
