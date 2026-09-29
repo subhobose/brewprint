@@ -43,12 +43,13 @@ export type CupGeometry = {
   capRy: number;
   /** Height of the lid dome above the rim. Zero: iced glasses have no lid. */
   lidH: number;
+  /** Closed outline. For fills and clip paths only — never stroke this. */
   interior: string;
+  /** The same outline left open at the rim. Stroke this. */
+  wall: string;
   frame: string;
   lid: string;
   lidFlange: string;
-  /** Molded rings around the upper body. */
-  ribs: string[];
   /** Half the body width at a fraction `t` of the way down from the rim. */
   halfAt: (t: number) => number;
 };
@@ -91,8 +92,6 @@ export function cupGeometry(
   // *width*, so on a wide hero box the shadow ran off the bottom and was clipped.
   const baseY = h - (baseRy * 1.85 + 6);
 
-  // Headroom is now just the rim, so the glass reclaims the space the dome used
-  // to take and stands taller in its box.
   const pad = h * 0.03 + lipRy + 6;
   const bodyH = (baseY - pad) * 0.9 * scale.h;
   const rimY = baseY - bodyH;
@@ -110,13 +109,24 @@ export function cupGeometry(
   const bowlTop = baseY - baseRy;
   const bowlPull = bowlTop + baseRy * (4 / 3);
 
-  const interior = [
+  /*
+   * Two forms of the same outline, and they are not interchangeable.
+   *
+   * `wall` is open: left wall, across the base, up the right wall, stopping at
+   * the rim. `interior` closes it with `Z`, which adds a straight segment from
+   * the right rim back to the left rim.
+   *
+   * Fills and clip paths need the closed one. **Strokes must use `wall`** — a
+   * stroked `interior` draws that closing segment as a line straight across the
+   * mouth of the glass, in the same weight as the walls.
+   */
+  const wall = [
     `M ${lT} ${rimY}`,
     `L ${lB} ${bowlTop}`,
     `C ${lB} ${bowlPull} ${rB} ${bowlPull} ${rB} ${bowlTop}`,
     `L ${rT} ${rimY}`,
-    'Z',
   ].join(' ');
+  const interior = `${wall} Z`;
 
   // Outer box first, interior second; even-odd makes the interior a hole.
   const frame = `M 0 0 H ${w} V ${h} H 0 Z ${interior}`;
@@ -126,14 +136,10 @@ export function cupGeometry(
   const lid = '';
   const lidFlange = '';
 
-  // Body half-width at a fraction of the way down, for the molded rings.
+  // No molded rings on the glass. They sat at 10% and 17% of the body, which is
+  // exactly where the foam cap lands, and read as two stray lines drawn across
+  // the drink rather than as moulding in the glass.
   const halfAt = (t: number) => topW / 2 + (botW / 2 - topW / 2) * t;
-  const rib = (t: number) => {
-    const y = rimY + bodyH * t;
-    const hw = halfAt(t);
-    return `M ${cx - hw} ${y} Q ${cx} ${y + lipRy * 0.6} ${cx + hw} ${y}`;
-  };
-  const ribs = style === 'cold' ? [rib(0.1), rib(0.17)] : [rib(0.12)];
 
   return {
     w,
@@ -151,10 +157,10 @@ export function cupGeometry(
     capRy: lipRy * 0.72,
     lidH,
     interior,
+    wall,
     frame,
     lid,
     lidFlange,
-    ribs,
     halfAt,
   };
 }

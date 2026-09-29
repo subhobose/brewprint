@@ -351,20 +351,50 @@ export function drinkColor(r: Recipe): string {
  * foam is green, biscoff foam is gold). If it still lands too close in luminance
  * to the body it gets lightened until it doesn't.
  */
+/** How far apart in luminance the foam has to sit from the liquid under it. */
+const FOAM_CONTRAST = 80;
+
+/** How much of the drink's height the brew and the milk blend across. */
+export const BLEND_ZONE = 0.26;
+
+/** Straight-line distance between two colours in RGB. */
+function distance(a: string, b: string): number {
+  const [r1, g1, b1] = hex(a);
+  const [r2, g2, b2] = hex(b);
+  return Math.hypot(r1 - r2, g1 - g2, b1 - b2);
+}
+
 export function foamColor(r: Recipe): string {
   // Colour comes from the foam's own flavour, not the drink's syrup. Plain cold
   // foam on a latte is milk foam and should look like milk foam; ube foam is
   // purple whatever is underneath it.
   const foam = foamOf(r).color;
 
-  // Sweet cream is close to milk by definition, so it's the one that needs help
-  // standing off a pale drink. A flavoured foam already differs in hue.
-  if (r.foam !== 'sweetcream') return foam;
+  /*
+   * Contrast is measured against the liquid **directly beneath the foam**, which
+   * is the brew at the top of the drink — not `drinkColor`, the blended average
+   * of the whole cup. Measuring against the average flattered a foam that in fact
+   * sits on something much darker, so the guard rarely fired when it should have.
+   *
+   * The target comes from the photographs: foam reads 193–233 over liquid at
+   * 76–168, a gap of 66–129. Half that is what made the cap look washed into the
+   * drink.
+   */
+  const underHex = brewColor(r);
+  const under = luma(underHex);
 
-  const bodyL = luma(drinkColor(r));
-  if (Math.abs(luma(foam) - bodyL) >= 34) return foam;
+  // Two ways to be distinct, and either is enough. A strongly hued foam reads
+  // apart on colour alone — ube on bright matcha is unmistakable at almost the
+  // same brightness — while a pale cream has only brightness to work with.
+  if (distance(foam, underHex) >= 150 || luma(foam) - under >= FOAM_CONTRAST) return foam;
 
-  return withLuma(foam, bodyL > 170 ? Math.max(bodyL - 46, 130) : Math.min(bodyL + 62, 246));
+  // Lift it, keeping its hue. On a bright drink that can hit the ceiling, since
+  // channels clamp at 255; when it does, drop it instead and let it read as a
+  // deeper cap.
+  const lifted = withLuma(foam, under + FOAM_CONTRAST);
+  if (luma(lifted) - under >= FOAM_CONTRAST - 8) return lifted;
+
+  return withLuma(foam, Math.max(under - FOAM_CONTRAST, 70));
 }
 
 /**
@@ -403,31 +433,43 @@ export type IcedComposition = {
  * in the wrong order; this is two liquids with an irregular, trickling boundary,
  * which is what the photographs actually show.
  */
-export function icedComposition(r: Recipe): IcedComposition {
-  const { espressoOz, syrupOz, brewOz, milkOz } = volumes(r);
+/**
+ * The brew alone — espresso, syrup and the base's own liquid, without any milk.
+ *
+ * This is what sits at the top of an iced drink, and therefore what the foam
+ * rests on, so both the composition and the foam's contrast guard read it from
+ * here rather than each deciding for themselves.
+ */
+export function brewColor(r: Recipe): string {
+  const { espressoOz, syrupOz, brewOz } = volumes(r);
 
-  const coffeeOz = espressoOz + syrupOz + brewOz;
-  const coffeeParts: { color: string; weight: number }[] = [
+  const parts: { color: string; weight: number }[] = [
     { color: ESPRESSO_DARK, weight: espressoOz * PIGMENT.espresso },
     { color: baseOf(r).liquid, weight: brewOz * PIGMENT.brew },
     { color: syrupOf(r).color, weight: r.syrup === 'none' ? 0 : syrupOz * PIGMENT.syrup },
   ].filter((p) => p.weight > 0);
 
-  let coffee = baseOf(r).liquid;
-  if (coffeeParts.length) {
-    const total = coffeeParts.reduce((s, p) => s + p.weight, 0);
-    const acc = [0, 0, 0];
-    for (const p of coffeeParts) {
-      const [pr, pg, pb] = hex(p.color);
-      acc[0] += pr * p.weight;
-      acc[1] += pg * p.weight;
-      acc[2] += pb * p.weight;
-    }
-    coffee = saturate(
-      '#' + acc.map((v) => Math.round(v / total).toString(16).padStart(2, '0')).join(''),
-      CHROMA_LIFT,
-    );
+  if (!parts.length) return baseOf(r).liquid;
+
+  const total = parts.reduce((s, p) => s + p.weight, 0);
+  const acc = [0, 0, 0];
+  for (const p of parts) {
+    const [pr, pg, pb] = hex(p.color);
+    acc[0] += pr * p.weight;
+    acc[1] += pg * p.weight;
+    acc[2] += pb * p.weight;
   }
+  return saturate(
+    '#' + acc.map((v) => Math.round(v / total).toString(16).padStart(2, '0')).join(''),
+    CHROMA_LIFT,
+  );
+}
+
+export function icedComposition(r: Recipe): IcedComposition {
+  const { espressoOz, syrupOz, brewOz, milkOz } = volumes(r);
+
+  const coffeeOz = espressoOz + syrupOz + brewOz;
+  const coffee = brewColor(r);
 
   // No milk means no second liquid, so there is nothing to blend into: the cup is
   // brew top to bottom. An americano taken black is black all the way down, not a

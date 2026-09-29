@@ -23,34 +23,66 @@
 import React from 'react';
 import { Defs, G, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-import { IcedComposition, mix } from './coffee';
+import { BLEND_ZONE as ZONE, IcedComposition, mix } from './coffee';
 
-/** How much of the drink's height the two liquids blend across. */
-const ZONE = 0.26;
+/**
+ * The shadow a foam cap throws onto the drink it sits on.
+ *
+ * This is the cue that reads as "a solid object resting on liquid" rather than
+ * "two coloured bands stacked up", and every reference photograph has one.
+ */
+function FoamShadow({ width, height, id }: { width: number; height: number; id: string }) {
+  const h = Math.max(2, height * 0.09);
+  return (
+    <>
+      <Defs>
+        <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#000000" stopOpacity="0.32" />
+          <Stop offset="0.55" stopColor="#000000" stopOpacity="0.12" />
+          <Stop offset="1" stopColor="#000000" stopOpacity="0" />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={width} height={h} fill={`url(#${id})`} />
+    </>
+  );
+}
 
 export default function DrinkBody({
   width,
   height,
   comp,
   gradId,
+  shadow = false,
 }: {
   width: number;
   height: number;
   comp: IcedComposition;
   /** Must be unique per instance; SVG ids are document-global on web. */
   gradId: string;
+  /** Draw the shadow cast by a foam cap sitting on top of this body. */
+  shadow?: boolean;
 }) {
   const { milk, coffee, blend, coffeeShare } = comp;
 
   // Nothing but milk in the cup, so there is no second liquid to meet.
   if (coffeeShare <= 0) {
-    return <Rect x={0} y={0} width={width} height={height} fill={milk} />;
+    return (
+      <G>
+        <Rect x={0} y={0} width={width} height={height} fill={milk} />
+        {shadow && <FoamShadow width={width} height={height} id={`${gradId}-sh`} />}
+      </G>
+    );
   }
 
   // …and the reverse: no milk, so the brew fills the cup with nothing to blend
   // into. A black americano is one flat colour, not a gradient.
   if (coffeeShare >= 1) {
-    return <Rect x={0} y={0} width={width} height={height} fill={coffee} />;
+    return (
+      <G>
+        <Rect x={0} y={0} width={width} height={height} fill={coffee} />
+        {shadow && <FoamShadow width={width} height={height} id={`${gradId}-sh`} />}
+      </G>
+    );
   }
 
   const zoneH = height * ZONE;
@@ -89,6 +121,9 @@ export default function DrinkBody({
         no edges, so it has to be done with colour alone.
       */}
       <Rect x={0} y={zoneTop} width={width} height={zoneBot - zoneTop} fill={`url(#${gradId})`} />
+
+      {/* Drawn last so it falls across whatever is at the top of the drink. */}
+      {shadow && <FoamShadow width={width} height={height} id={`${gradId}-sh`} />}
     </G>
   );
 }

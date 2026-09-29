@@ -46,8 +46,12 @@ const BUBBLE_COUNT = 4;
 
 export default function LiquidCup({ recipe, width, height, frameColor }: Props) {
   const geo = useMemo(
-    () => cupGeometry(width, height, { size: recipe.size, style: recipe.iced ? 'cold' : 'hot' }),
-    [width, height, recipe.size, recipe.iced],
+    () =>
+      cupGeometry(width, height, {
+        size: recipe.size,
+        style: recipe.iced ? 'cold' : 'hot',
+      }),
+    [width, height, recipe],
   );
   const bands = useMemo(() => layersFor(recipe), [recipe]);
 
@@ -188,7 +192,13 @@ export default function LiquidCup({ recipe, width, height, frameColor }: Props) 
                 Foam keeps a flat fill; it's aerated, not marbled. */}
             {b.id === 'body' && (
               <Svg width={width} height={b.h} style={StyleSheet.absoluteFill}>
-                <DrinkBody width={width} height={b.h} comp={comp} gradId={bodyId} />
+                <DrinkBody
+                  width={width}
+                  height={b.h}
+                  comp={comp}
+                  gradId={bodyId}
+                  shadow={foamOnTop}
+                />
               </Svg>
             )}
 
@@ -237,6 +247,7 @@ export default function LiquidCup({ recipe, width, height, frameColor }: Props) 
         <Path d={geo.frame} fill={frameColor} fillRule="evenodd" />
 
         <CupChrome geo={geo} />
+
       </Svg>
     </View>
   );
@@ -253,6 +264,8 @@ export default function LiquidCup({ recipe, width, height, frameColor }: Props) 
  * those was tried and each read as something sitting *in* the drink: speckle,
  * a muddy band, and a stray oval.
  */
+const GRAIN = 70;
+
 function FoamCrest({
   width,
   height,
@@ -262,19 +275,56 @@ function FoamCrest({
   height: number;
   color: string;
 }) {
+  const light = mix(color, '#FFFFFF', 0.5);
+  const dark = mix(color, '#000000', 0.14);
+
   return (
     <View
       pointerEvents="none"
-      style={{
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width,
-        height: Math.max(1.5, height * 0.16),
-        backgroundColor: mix(color, '#FFFFFF', 0.45),
-        opacity: 0.55,
-      }}
-    />
+      style={{ position: 'absolute', left: 0, top: 0, width, height }}
+    >
+      {/*
+        Fine grain, not bubbles.
+
+        An earlier version drew ~16 circles at 8–19% of the cap's height. At that
+        size individual shapes are legible, and legible circles on a drink read as
+        bubbles stuck to the glass. Aerated foam is a *texture*: many specks, each
+        far too small to resolve on its own, so the eye takes the whole cap as
+        whipped rather than counting marks on it. These are a quarter the size and
+        four times as many.
+      */}
+      {Array.from({ length: GRAIN }).map((_, i) => {
+        const r = height * (0.022 + seeded(i * 2.3) * 0.035);
+        return (
+          <View
+            key={`g-${i}`}
+            style={{
+              position: 'absolute',
+              left: seeded(i + 1) * width,
+              top: height * (0.06 + seeded(i + 60) * 0.86),
+              width: r,
+              height: r,
+              borderRadius: r / 2,
+              backgroundColor: i % 3 === 0 ? dark : light,
+              opacity: i % 3 === 0 ? 0.3 : 0.45,
+            }}
+          />
+        );
+      })}
+
+      {/* Light along the top edge, where the cap meets the air. */}
+      <View
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width,
+          height: Math.max(1.5, height * 0.14),
+          backgroundColor: light,
+          opacity: 0.5,
+        }}
+      />
+    </View>
   );
 }
 

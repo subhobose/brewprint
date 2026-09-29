@@ -3,6 +3,135 @@
 Newest first. Records what changed and, where it matters, why. Technical detail lives in
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+## 2026-10-04 (evening) — Foam texture; mound and ice changes reverted
+
+**Reverted the foam mound.** Reading the new references as a change of silhouette was wrong — the
+ask was about the cap's *texture*, nothing else. `foamDome`, `DOME_RISE` and the `foam` headroom flag
+on `cupGeometry` are gone, and cup heights are back to their plain figures.
+
+**Reverted the ice cubes** to translucent white. `iceTones` and `liquidAt` removed; `BLEND_ZONE`
+stayed, since `DrinkBody` uses it.
+
+**Gave the cap a fine aerated grain.** The distinction from the bubbles removed earlier is *size*,
+and it is the whole point: that version drew ~16 circles at 8–19% of the cap's height, which on a
+52pt band is a 4–10pt radius — large enough to resolve individually, and legible circles on a drink
+read as bubbles stuck to the glass. The grain is a quarter the size (1–3pt) and four times as many,
+so no speck resolves on its own and the eye takes the whole cap as whipped. Applied in both
+renderers, with the light crest along the top edge kept.
+
+**Verified:** typecheck clean, lint clean, both bundles compile, cup geometry confirmed back to its
+pre-mound figures.
+
+## 2026-10-04 (later) — Cold foam mounds above the rim; ice reverted
+
+**Reverted the ice cubes** to translucent white, at the user's request. `iceTones` and `liquidAt`
+removed; `BLEND_ZONE` stayed in `coffee.ts` since `DrinkBody` uses it.
+
+**Cold foam now rises above the rim.** New references — a whipped-coffee illustration and a cold foam
+photograph — both show the same silhouette, and it's the one thing a flat band inside the glass can
+never do: an opaque cap standing over the lip with an irregular, slightly off-centre peak, seated
+into the glass rather than ruled flat.
+
+`foamDome(geo)` draws it and both renderers lay it down last, after the frame and the glass, so it
+sits over the rim rather than being painted out by the cup's own outline.
+
+`cupGeometry` takes a `foam` flag and reserves headroom for the mound, so a foamed drink's glass is
+shorter while cup-plus-foam still fills the frame. Without that the mound ran off the top of the
+canvas at 20oz, where the rim already sits high — caught by extracting the dome path's bounding box
+and checking it against the canvas at every size.
+
+**Verified:** typecheck clean, lint clean, both bundles compile, dome on-canvas at all nine
+size/canvas combinations, and ice still fully placed in the shorter foamed cup.
+
+## 2026-10-04 — Ice made opaque, so everything in the cup can be told apart
+
+Working from `download.jpg`, a flat vector illustration in the same medium as our render. Sampling it
+showed its ice sits ~83 luma off the coffee beside it, with a lit face and a shadowed facet.
+
+**Ice was translucent white**, so it inherited whatever was behind it — invisible against pale milk,
+muddy grey in dark coffee. It is now opaque and toned against the liquid at its own depth via new
+`liquidAt` and `iceTones`, with a shadowed facet and a drawn edge. Mixing toward white before setting
+luminance keeps a trace of the liquid's hue, so ice in coffee reads warm and ice in matcha faintly
+green.
+
+Two regimes, both from the reference: against a **dark** liquid the face lifts the full 82; against a
+**pale** one there's no headroom, so the face stays pale and the edge outlines it — the illustration
+does exactly this, its cubes in the milky top being only 11 luma off their surroundings.
+
+A first attempt applied the 82 lift unconditionally, which made cubes *darker* than a bright matcha.
+Ice is never darker than what it sits in; a dark cube in a pale drink reads as a hole. Checked across
+225 depth samples: 169 cubes are distinguished by face tone, 56 by edge, none by neither.
+
+`BLEND_ZONE` moved to `coffee.ts` so the ice and the body agree on where the blend band sits.
+
+**Verified:** typecheck clean, lint clean, both bundles compile.
+
+## 2026-10-03 (evening) — The line across the mouth of the glass
+
+The cup outline was being **stroked from its closed path**. `interior` ends in `Z`, which adds a
+straight segment from the right rim back to the left rim, so stroking it drew a line straight across
+the top of the glass in the same weight as the walls. The previous three removals were all real, but
+none of them was this.
+
+The geometry now returns the outline in two forms: `wall`, open and stopping at the rim, and
+`interior`, closed. Fills and clip paths take `interior`; strokes take `wall`. Audited every use —
+the only stroked one was the cup wall, and the rest are fills, clips or the frame, which all need the
+closed form.
+
+Written up in ARCHITECTURE.md, because the closed path is the obvious one to reach for and the fill
+and the stroke genuinely want different things.
+
+**Verified:** typecheck clean, lint clean, both bundles compile.
+
+## 2026-10-03 (later) — Removed the second rim ellipse
+
+The rim was drawn as two stacked ellipses: the outer edge, and an inner one 0.42 lip-radii below it
+meant to suggest the inside wall of the rolled lip. It read as an extra line hanging under the mouth
+of the glass rather than as thickness.
+
+Four ellipses remain in the whole cup, and each is the glass or the counter rather than a mark on
+the drink: the contact shadow, the glass floor, a light catch on the base, and the rim.
+
+**Verified:** typecheck clean, lint clean, both bundles compile.
+
+## 2026-10-03 — Removed three stray lines from the cup
+
+**The two molded rings are gone.** They were positioned at 10% and 17% of the body height, which on
+a 16oz hero puts them at y=115 and y=142 — inside a foam band spanning y=92–163. Both were being
+drawn straight across the cold foam, which is what they looked like: two lines on the foam, not
+moulding in the glass.
+
+**The liquid surface ellipse is gone.** It sat exactly on the surface and read as a line across the
+top of the drink. The rim of the glass already says where the top is.
+
+Rule added to ARCHITECTURE.md: only the glass gets lines. Anything drawn across the drink reads as a
+line on it rather than depth in it, however faint — depth comes from colour, never strokes. The rim,
+wall and base outlines stay, since those are the glass itself.
+
+**Verified:** typecheck clean, lint clean, both bundles compile.
+
+## 2026-10-02 (night) — Foam made distinct, measured against the references
+
+Sampling the foam photographs gave two concrete gaps.
+
+**Contrast was measured against the wrong neighbour.** `foamColor` compared against `drinkColor` —
+the blended average of the whole cup — when what actually sits under the cap is the brew at the top
+of the drink. Extracted `brewColor` so the composition and the foam guard read one definition, and
+the guard now compares against it.
+
+**The target was about half the references.** They show foam at 193–233 over liquid at 76–168, a gap
+of 66–129; ours asked for 34–40. `FOAM_CONTRAST` is now 80, and distinctness is satisfied by either
+a large luminance gap **or** a large colour distance — a hued foam reads apart on colour alone (ube
+over matcha: gap −15, distance 198) while a pale cream has only brightness. Lifting can hit the
+channel ceiling on a bright drink, so when it does the foam drops instead.
+
+**Added the shadow the foam casts onto the drink.** Every reference photograph has one, and it's the
+cue that reads as a solid object resting on liquid rather than two stacked bands. `DrinkBody` takes a
+`shadow` flag and lays a short dark gradient across the top of the drink, in both renderers.
+
+**Verified:** typecheck clean, lint clean, both bundles compile, and foam separation checked across
+252 base/milk/flavour/shot combinations — the weakest case sits at 116% of the required separation.
+
 ## 2026-10-02 (evening) — Lid removed from iced glasses
 
 **The dome is gone.** Every reference photograph of an iced coffee is an open glass; the domed lid

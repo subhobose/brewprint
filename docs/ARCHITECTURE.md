@@ -141,8 +141,26 @@ syrup. Plain cold foam on a latte is milk foam and should look like milk foam; u
 whatever is underneath it. `FOAMS` lists sweet cream, vanilla, salted caramel, ube, matcha,
 pistachio and strawberry, and `recipe.foam` selects one.
 
-Only sweet cream needs a contrast guard, since it's close to milk by definition; a flavoured foam
-already differs in hue. That guard lightens or deepens it against the body as needed.
+### Making foam read as foam
+
+Two things carry it, both measured off the photographs rather than guessed.
+
+**Contrast against the right neighbour.** `foamColor` compares against `brewColor` — the liquid
+*directly beneath the cap* — not `drinkColor`, which is the blended average of the whole cup.
+Measuring against the average flattered a foam that in fact sits on something much darker, so the
+guard rarely fired when it should have. The target is `FOAM_CONTRAST` = 80 luma, taken from
+references that read 193–233 over liquid at 76–168, a gap of 66–129. Half that is what made the cap
+look washed into the drink.
+
+Distinctness is satisfied by **either** a big luminance gap **or** a big colour distance. A strongly
+hued foam reads apart on colour alone — ube over bright matcha is unmistakable at almost the same
+brightness (gap −15, distance 198) — while a pale cream has only brightness to work with. Lifting
+can also hit the ceiling on a bright drink, since channels clamp at 255; when it does, the foam is
+dropped instead and reads as a deeper cap.
+
+**A cast shadow.** `DrinkBody` takes a `shadow` flag and lays a short dark gradient across the top of
+the drink. This is the cue that reads as *a solid object resting on liquid* rather than two coloured
+bands stacked up, and every reference photograph has one.
 
 **Cold foam is a cold-drink thing.** A hot coffee's foam is steamed into the milk rather than
 poured over the top, so the option doesn't apply. `hasFoam(r)` gates it centrally — on the volume
@@ -158,8 +176,11 @@ the band taller was the wrong reading and it just ate the drink. Density is carr
 **Foam is poured on top of the coffee and does not mix with it.** That one sentence settles three
 things that were each tried and each looked wrong:
 
-- **No bubble texture.** Every reference photograph shows a smooth cream surface. Scattered bubbles
-  read as speckle floating on the drink, not as foam.
+- **Grain, not bubbles.** The cap carries a fine aerated texture, and the distinction is *size*. An
+  earlier version drew ~16 circles at 8–19% of the cap's height — on a 52pt band that is a 4–10pt
+  radius, large enough to resolve individually, and legible circles on a drink read as bubbles stuck
+  to the glass. The grain is a quarter that size (1–3pt) and four times as many, so no speck is
+  resolvable on its own and the eye takes the whole cap as whipped.
 - **No blend into the drink below.** A gradient there produced a muddy band belonging to neither
   liquid. The cap's own flat colour meets the coffee at a clean edge.
 - **No seam ellipse across the coffee.** Drawing a surface ellipse at every band boundary put a
@@ -305,8 +326,7 @@ true, and dissipates. Growth and lean are what sell it, more than the path shape
 
 ## The vessel
 
-The cup is a clear tapered glass: rolled lip, two molded rings around the upper body and an
-elliptical base. **No lid and no straw** — every reference photograph of an iced coffee is an open
+The cup is a clear tapered glass: rolled lip and an elliptical base. **No lid and no straw** — every reference photograph of an iced coffee is an open
 glass, and a domed lid put a plastic cap over a drink that is meant to look poured. Hot drinks
 don't come through this geometry at all; they get their own mug in `LatteArtCup`.
 
@@ -338,11 +358,30 @@ Roundness therefore has to come from geometry:
 1. **Elliptical base.** The wall runs down to where the base ellipse begins and a symmetric
    cubic carries it across, with control points at 4/3 of the radius so the curve bottoms out
    exactly at `baseY`. A flat bottom edge is the strongest single tell of a 2D drawing.
-2. **Curved liquid surfaces.** `capRy` and `halfAt(t)` put an ellipse at the top of every band,
-   sized to the taper at that depth, so each layer is seen slightly from above. In the
-   thumbnail these are a second pass drawn after all the rectangles, so a band's surface can
-   bulge up into the band above. In the hero cup each ellipse lives *inside its own band's
-   View*, so it travels with the pour instead of sitting still while the liquid moves.
+2. **The rim and base ellipses**, which are where the eye reads the cup as round.
+
+> **Only the glass gets lines.** Anything drawn *across the drink* reads as a line on it, not as
+> depth in it, however faint. Three were removed for this reason and none should come back:
+>
+> | drawn | where it landed | read as |
+> |---|---|---|
+> | surface ellipse on the top band | on the liquid surface | a line across the top |
+> | two molded rings on the glass | y=115 and y=142, inside a foam band spanning 92–163 | two lines across the foam |
+>
+> The rim already tells you where the top of the drink is, and the wall already tells you the glass
+> is round. Depth in the liquid comes from colour — `DrinkBody`'s blend band, `CupChrome`'s cylinder
+> gradient — never from strokes.
+
+> **Never stroke `interior`; stroke `wall`.**
+>
+> The geometry returns the cup outline in two forms. `wall` is open — left wall, across the base, up
+> the right wall, stopping at the rim. `interior` closes it with `Z`, which adds a straight segment
+> from the right rim back to the left rim.
+>
+> Fills and clip paths need the closed one. A *stroked* `interior` draws that closing segment as a
+> line straight across the mouth of the glass, in the same weight as the walls — which is exactly
+> what it looks like. This is easy to reintroduce, because the closed path is the obvious one to
+> reach for and the fill and the stroke want different things.
 3. **Light wrapping the cylinder.** A white-only gradient: a broad specular band left of
    centre and a thinner catch on the right edge. There is deliberately **no separate highlight
    strip down the left wall** — as a drawn shape it read as a band stuck on the glass.
@@ -381,6 +420,27 @@ reading as ice.
 
 The hero cup's cubes are positioned in cup coordinates and then shifted by their container's
 offset, because they live inside the liquid View so they travel with the pour.
+
+### Ice has to be opaque
+
+`iceTones(under)` colours each cube against the liquid **at its own depth**, via `liquidAt`. Drawing
+ice as translucent white instead lets it inherit whatever is behind it: it vanishes into pale milk
+and turns muddy grey in dark coffee, which is what stopped anything in the cup being tellable apart.
+Mixing toward white *before* setting the luminance keeps a trace of the liquid's hue, so ice in
+coffee reads warm and ice in matcha faintly green.
+
+Two regimes, taken from the reference illustration:
+
+- **Against a dark liquid** the face lifts a full 82 luma. That illustration's cubes sit 83 above the
+  coffee beside them.
+- **Against a pale liquid** there is no headroom, so the face stays pale and the **edge** does the
+  work — in the same illustration, ice in the milky top of the glass is only 11 luma off its
+  surroundings and is read entirely by its outline.
+
+**Ice is never darker than what it sits in.** A dark cube in a pale drink reads as a hole. Checked
+across 225 depth samples: every cube is distinguished by face tone or by edge, none by neither.
+
+Each cube also carries a shadowed facet, which is what makes a square read as a cube.
 
 ### Ice and sweetness
 

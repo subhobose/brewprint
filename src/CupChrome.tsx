@@ -90,22 +90,13 @@ export default function CupChrome({ geo }: { geo: CupGeometry }) {
         opacity={0.16}
       />
 
-      {/* Wall. */}
-      <Path d={geo.interior} fill="none" stroke={GLASS} strokeOpacity={0.32} strokeWidth={stroke} />
+      {/* Wall. Uses the open `wall` path, not `interior` — stroking the closed
+          one draws its closing segment straight across the mouth of the glass. */}
+      <Path d={geo.wall} fill="none" stroke={GLASS} strokeOpacity={0.32} strokeWidth={stroke} />
 
-      {/* Molded rings. */}
-      {geo.ribs.map((d, i) => (
-        <Path
-          key={`rib-${i}`}
-          d={d}
-          fill="none"
-          stroke={GLASS}
-          strokeOpacity={0.15}
-          strokeWidth={hair}
-        />
-      ))}
-
-      {/* Rolled lip: outer edge, then the inner wall of the roll under it. */}
+      {/* The rim, and only the rim. A second ellipse under it, for the inner wall
+          of the roll, read as an extra line hanging below the mouth of the glass
+          rather than as thickness. */}
       <Ellipse
         cx={cx}
         cy={rimY}
@@ -115,16 +106,6 @@ export default function CupChrome({ geo }: { geo: CupGeometry }) {
         stroke={GLASS}
         strokeOpacity={0.32}
         strokeWidth={stroke}
-      />
-      <Ellipse
-        cx={cx}
-        cy={rimY + lipRy * 0.42}
-        rx={topW / 2 - stroke * 1.3}
-        ry={lipRy * 0.72}
-        fill="none"
-        stroke={GLASS}
-        strokeOpacity={0.16}
-        strokeWidth={hair}
       />
 
       {/* The lid, when there is one. Iced glasses are open, so `geo.lid` is blank

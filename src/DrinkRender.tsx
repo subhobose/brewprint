@@ -8,13 +8,13 @@
  */
 
 import React, { useId } from 'react';
-import Svg, { ClipPath, Defs, Ellipse, G, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 
 import CupChrome from './CupChrome';
 import DrinkBody from './DrinkBody';
 import LatteArtCup from './LatteArtCup';
 import { ICE_COUNT, Recipe, SizeOz, icedComposition, layersFor, mix } from './coffee';
-import { CupStyle, cupGeometry, iceBed } from './cup';
+import { CupStyle, cupGeometry, iceBed, seeded } from './cup';
 
 const VB_W = 250;
 const VB_H = 380;
@@ -93,7 +93,13 @@ function IcedThumb({ recipe, width, size, style }: Props) {
         {drawn.map((b) =>
           b.id === 'body' ? (
             <G key={b.id} transform={`translate(0, ${b.y})`}>
-              <DrinkBody width={VB_W} height={b.h} comp={comp} gradId={bodyId} />
+              <DrinkBody
+                width={VB_W}
+                height={b.h}
+                comp={comp}
+                gradId={bodyId}
+                shadow={drawn.some((x) => x.id === 'foam')}
+              />
             </G>
           ) : (
             // Foam is flat and opaque, poured on top of the coffee. It does not
@@ -103,42 +109,39 @@ function IcedThumb({ recipe, width, size, style }: Props) {
           ),
         )}
 
-        {/* …then one ellipse, on the **topmost** band only: that's the drink's
-            actual surface, seen slightly from above. Drawing one at every
-            boundary put a stray oval across the coffee under the foam, where
-            there is no surface — foam sits on the coffee, it doesn't float on a
-            second one. */}
-        {drawn.length > 0 &&
-          (() => {
-            const b = drawn[drawn.length - 1];
-            const t = (b.y - geo.rimY) / geo.bodyH;
-            return (
-              <Ellipse
-                cx={geo.cx}
-                cy={b.y}
-                rx={geo.halfAt(Math.max(0, Math.min(1, t)))}
-                ry={geo.capRy}
-                fill={mix(b.color, '#FFFFFF', 0.16)}
-              />
-            );
-          })()}
+        {/* No ellipse on the liquid surface. Lightening it to suggest a surface
+            seen from above just drew a line across the top of the drink; the
+            rim of the glass already tells you where the top is. */}
 
-        {/* Just the light on top of the cap — no bubble texture. Every reference
-            photograph shows a smooth cream surface; scattered bubbles read as
-            speckle on the drink rather than as foam. */}
+        {/* Fine grain, matching the hero cup's FoamCrest. Specks too small to
+            resolve individually, so the cap reads as whipped rather than as a
+            handful of bubbles stuck to the glass. */}
         {drawn
           .filter((b) => b.id === 'foam')
-          .map((b) => (
+          .flatMap((b) => [
+            ...Array.from({ length: 60 }).map((_, i) => {
+              const r = b.h * (0.022 + seeded(i * 2.3) * 0.035);
+              return (
+                <Circle
+                  key={`grain-${i}`}
+                  cx={geo.cx - geo.topW / 2 + seeded(i + 1) * geo.topW}
+                  cy={b.y + b.h * (0.08 + seeded(i + 60) * 0.82)}
+                  r={r}
+                  fill={i % 3 === 0 ? mix(b.color, '#000000', 0.14) : mix(b.color, '#FFFFFF', 0.5)}
+                  opacity={i % 3 === 0 ? 0.3 : 0.45}
+                />
+              );
+            }),
             <Rect
               key="crest"
               x={0}
               y={b.y}
               width={VB_W}
-              height={Math.max(1.5, b.h * 0.16)}
-              fill={mix(b.color, '#FFFFFF', 0.45)}
-              opacity={0.55}
-            />
-          ))}
+              height={Math.max(1.5, b.h * 0.14)}
+              fill={mix(b.color, '#FFFFFF', 0.5)}
+              opacity={0.5}
+            />,
+          ])}
 
         {/* Ice sits in a bed at the bottom of the cup, not scattered through it. */}
         {ice &&
@@ -162,6 +165,7 @@ function IcedThumb({ recipe, width, size, style }: Props) {
       </G>
 
       <CupChrome geo={geo} />
+
     </Svg>
   );
 }
