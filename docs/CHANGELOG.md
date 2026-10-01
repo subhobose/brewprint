@@ -3,6 +3,114 @@
 Newest first. Records what changed and, where it matters, why. Technical detail lives in
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+## 2026-10-05 (later) — Loading screen drink gets its ice back
+
+It was running `ice: 'none'` on the theory that cubes moving under a pouring cup and cycling text was
+too much at once. That was wrong about the motion: `Ice` shifts a cube 2.2pt and turns it 4°, which
+is well under the wave already running on the surface — and an iced drink with no ice in it is the
+stranger thing for a guest to look at.
+
+Now `ice: 'light'`, which makes the splash recipe **identical to the menu tile**, with nothing left to
+explain away.
+
+**Verified:** typecheck clean, lint clean, iOS bundle builds. Asserted the splash recipe now equals
+the tile's exactly. All 6 cubes place on every hero box size, the bed fills 56% of the drink, and it
+never breaks the surface.
+
+## 2026-10-05 — Adjust sheet covers the stage; live preview moved inside it
+
+**The sheet now opens over the whole cup.** `sheetMax` was capped at 62% of the screen, which left
+the hero cup half visible behind the controls — neither the drink nor the menu. Its top edge now
+lands 10pt below the header, which is above the cup's rim on every device size. The header stays
+uncovered on purpose: it is the only thing naming what you are editing.
+
+**The live preview moved inside the sheet.** It was anchored above the sheet's top edge, so a
+full-height sheet would have pushed it off the screen — the two changes are one change. It is now
+pinned to the top-right of the sheet with the controls scrolling under it, and since the hero cup is
+fully hidden while editing, it is the only cup on screen: it is what makes a chip tap visible at all.
+Its box is derived arithmetically so `CONTROLS_TOP` can clear it; see
+[ARCHITECTURE.md](ARCHITECTURE.md#the-live-preview).
+
+**Fixed a clipped button found on the way.** `SHEET_PEEK` is the peek's content height, but
+`insets.bottom` was being subtracted from the stage instead of added to the peek, so the "Ask the
+barista to change something" button was cut off by the sheet's `overflow: hidden` on any device with
+a home indicator.
+
+**Verified:** typecheck clean, lint clean, iOS bundle builds. Geometry checked on five device sizes
+(SE through 15 Pro Max): the open sheet clears the header and covers the cup's rim on all of them,
+the peek fits its content, and the first control row clears the preview card by 10pt. Separately,
+140 single-field recipe edits confirmed the preview's pop key misses nothing the cup draws.
+
+## 2026-10-04 (night, last) — Loading screen shows the ube matcha
+
+The opening cup is now the **ube matcha from the trending shelf**, field for field, so the first drink
+a guest sees is one they can go and order. Purple foam on green is the most recognisable thing in the
+range, and it is the only cap that needs no correction to clear the page: ube sits 128 from
+`COLORS.bg` in RGB, so the backdrop guard leaves `#B187D8` untouched. Sweet cream had to be deepened
+to get there.
+
+Still no ice, unlike the menu tile — the pour should be the only thing moving. `LINES` follows the
+drink: "Spooning the ube foam" replaces "Pouring the milk".
+
+**Verified:** typecheck clean, lint clean, iOS bundle builds. Asserted the splash recipe equals the
+menu tile's apart from `ice`. Foam `#B187D8` sits 198 from the brew and 122 from the almond milk.
+
+## 2026-10-04 (night, later still) — The deepened foam was grey; now beige
+
+Fixing the legibility made the cap grey. `withLuma` is a uniform multiply, so it preserves chroma in
+proportion — sweet cream starts at a channel spread of only 24, and a 35% lift of nearly nothing is
+still nearly nothing. It landed on `#ded5c2`.
+
+`deepen` now takes the larger of the proportional gain and whatever reaches `FOAM_CHROMA_FLOOR` (46),
+so sweet cream comes out `#e3d5b6` — beige, at the same luminance and the same legibility. A floor
+rather than a target, so vanilla keeps its own 62 and the two foams stay distinguishable rather than
+collapsing onto one cream.
+
+**Verified:** typecheck clean, lint clean, iOS bundle builds. The 9,072-recipe check now also asserts
+chroma ≥ 40 and that nothing exceeds the page ceiling; 0 failures, and the least chroma anywhere is 45
+(sweet cream, the colour that was grey).
+
+## 2026-10-04 (night, later) — Pale cold foam was invisible against the page
+
+Sweet cream foam was melting into the background. The cause is measurable and it was not the foam's
+texture: the glass is clear, so the cap is seen against `COLORS.bg`, and `#FCF4E4` sits **6.6 apart
+from the page in RGB**. It was the same colour as the paper behind it. More generally the page is
+luma 242 where real cold foam photographs at 193–233 — the background is brighter than foam is.
+
+`foamColor` now imposes a ceiling of `luma(COLORS.bg) − 28` and that ceiling beats the contrast
+target. Two things this surfaced:
+
+- The ceiling has to live *inside* the contrast guard. Deepening first and then running the old guard
+  let a bright matcha lift the cap right back to `under + 80`, above the page — satisfying the liquid
+  destroyed it against the background.
+- When neither direction reaches full contrast under the ceiling, the cap takes the best available
+  separation instead of dropping below the liquid. Matcha foam on a matcha was coming out dark olive,
+  which reads as a different drink rather than as foam.
+
+Only sweet cream and vanilla change on a dark drink; every foam changes on a bright one.
+
+`COLORS` moved to a new [src/theme.ts](../src/theme.ts) so `coffee.ts` can read the page colour
+without importing `react-native` — it has to stay runnable under plain Node for the colour checks.
+`ui.tsx` re-exports it.
+
+**Verified:** typecheck clean, lint clean, iOS bundle builds. All **9,072** iced-with-foam recipes
+(base × size × ice × syrup × pumps × milk × foam) checked numerically: every cap clears the page, a
+white card and the brew beneath it, and none comes out dark. Detail in
+[ARCHITECTURE.md](ARCHITECTURE.md#making-foam-read-as-foam).
+
+## 2026-10-04 (night) — Splash cup is matcha
+
+The loading screen's hero drink was a caramel cold brew; it is now an iced matcha with sweet cream
+foam. Green over cream is the most recognisable drink in the range, and on the warm `COLORS.bg`
+background a brown cup read as a generic cup of something. The status lines follow the drink —
+"Whisking the matcha" / "Pouring the milk" — since they narrate the cup on screen.
+
+Still no ice, for the reason recorded in [src/app/index.tsx](../src/app/index.tsx): the pour should
+be the only thing moving while the text cycles.
+
+**Verified:** typecheck clean, lint clean. Composition checked numerically — brew `#87bd25` over oat
+`#EFE0C4`, blend `#b7c871`, sweet cream cap well clear of the brew by the foam contrast guard.
+
 ## 2026-10-04 (evening) — Foam texture; mound and ice changes reverted
 
 **Reverted the foam mound.** Reading the new references as a change of silhouette was wrong — the

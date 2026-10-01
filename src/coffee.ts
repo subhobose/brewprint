@@ -4,7 +4,14 @@
  * This file has no UI in it on purpose. The render, the Barista Pass card, and
  * (later) cafe ingredient matching all read from the same Recipe shape, so the
  * drink you see is provably the drink the barista is handed.
+ *
+ * The one import is the palette, from `theme.ts` rather than `ui.tsx`, because the
+ * foam has to know what colour shows through the clear glass around it. Keep it
+ * that way: this module is compiled and run under plain Node to check the colour
+ * maths, so it must not pull in React or react-native.
  */
+
+import { COLORS } from './theme';
 
 export type SizeOz = 12 | 16 | 20;
 export type BaseId = 'americano' | 'coldbrew' | 'matcha';
@@ -354,6 +361,51 @@ export function drinkColor(r: Recipe): string {
 /** How far apart in luminance the foam has to sit from the liquid under it. */
 const FOAM_CONTRAST = 80;
 
+/**
+ * How far from the liquid in RGB counts as distinct regardless of brightness. A
+ * cream cap on a green matcha is unmistakable at almost the same luminance.
+ */
+const FOAM_DISTANCE = 150;
+
+/**
+ * How far *below* the page the foam has to sit.
+ *
+ * The glass is clear, so a pale cap is seen against the app's own background, and
+ * that background is cream: `COLORS.bg` is luma 242, while cold foam in the
+ * reference photographs reads 193–233. The page is brighter than real foam. Sweet
+ * cream at `#FCF4E4` is 245 — brighter still, and 6.6 from the page in RGB, which
+ * is to say identical. It disappeared.
+ *
+ * So the only direction with any room in it is *down*, and that also happens to be
+ * the truthful one: dairy foam photographs as creamier than paper, not brighter.
+ * 28 is a step you can see across a flat band without the cream going grey.
+ */
+const BACKDROP_CONTRAST = 28;
+
+/**
+ * How far a foam may be from the page in RGB and still count as legible on hue
+ * alone. Ube and strawberry are nowhere near cream; they need no help.
+ */
+const BACKDROP_DISTANCE = 60;
+
+/** Chroma put back after deepening, as a fraction of what the colour already has. */
+const FOAM_CHROMA = 0.35;
+
+/**
+ * The least chroma a deepened cap may end up with — max channel minus min.
+ *
+ * A proportional lift is not enough on its own, because `withLuma` is a uniform
+ * multiply and so preserves chroma *in proportion*: sweet cream starts nearly
+ * neutral at a spread of 24, and a third more of nearly nothing is still nearly
+ * nothing. Taken down to the page's ceiling it came out `#ded5c2` — grey.
+ *
+ * 46 is a beige: at a luminance of 214 it puts the cap at `#e4d5b6`, which is the
+ * colour of cream rather than of a grey card. This is a floor and not a target, so
+ * a foam that is already warmer than this — vanilla, at 62 — keeps its own chroma
+ * and stays distinguishable.
+ */
+const FOAM_CHROMA_FLOOR = 46;
+
 /** How much of the drink's height the brew and the milk blend across. */
 export const BLEND_ZONE = 0.26;
 
@@ -364,11 +416,33 @@ function distance(a: string, b: string): number {
   return Math.hypot(r1 - r2, g1 - g2, b1 - b2);
 }
 
+/**
+ * Take a colour to an exact luminance and put its warmth back.
+ *
+ * Deepen first, then saturate, then pin the luminance again. Saturating first
+ * pushes the bright channels past 255 where they clamp, and clamping is what
+ * flattens the hue — the colour comes back out less warm than it went in. The
+ * closing rescale is a uniform multiply, so it holds the target exactly while
+ * keeping the channel ratios `saturate` just established.
+ *
+ * The gain is whichever is larger: the proportional lift, or enough to reach
+ * `FOAM_CHROMA_FLOOR`. A near-neutral cream needs the floor — see the note there.
+ */
+function deepen(c: string, target: number): string {
+  const sunk = withLuma(c, target);
+  const [r, g, b] = hex(sunk);
+  const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+  // `saturate` scales each channel's distance from the mean by `1 + amount`, so
+  // the chroma scales by the same factor.
+  const gain = Math.max(1 + FOAM_CHROMA, chroma > 0 ? FOAM_CHROMA_FLOOR / chroma : 1);
+  return withLuma(saturate(sunk, gain - 1), target);
+}
+
 export function foamColor(r: Recipe): string {
   // Colour comes from the foam's own flavour, not the drink's syrup. Plain cold
   // foam on a latte is milk foam and should look like milk foam; ube foam is
   // purple whatever is underneath it.
-  const foam = foamOf(r).color;
+  const nominal = foamOf(r).color;
 
   /*
    * Contrast is measured against the liquid **directly beneath the foam**, which
@@ -386,15 +460,50 @@ export function foamColor(r: Recipe): string {
   // Two ways to be distinct, and either is enough. A strongly hued foam reads
   // apart on colour alone — ube on bright matcha is unmistakable at almost the
   // same brightness — while a pale cream has only brightness to work with.
-  if (distance(foam, underHex) >= 150 || luma(foam) - under >= FOAM_CONTRAST) return foam;
+  const apart = (c: string) =>
+    distance(c, underHex) >= FOAM_DISTANCE || luma(c) - under >= FOAM_CONTRAST;
 
-  // Lift it, keeping its hue. On a bright drink that can hit the ceiling, since
-  // channels clamp at 255; when it does, drop it instead and let it read as a
-  // deeper cap.
-  const lifted = withLuma(foam, under + FOAM_CONTRAST);
-  if (luma(lifted) - under >= FOAM_CONTRAST - 8) return lifted;
+  /*
+   * The page sets a ceiling, and the ceiling wins.
+   *
+   * The foam has two neighbours, not one: the liquid under it and the page seen
+   * through the clear glass around it. Checking only the liquid is what let a sweet
+   * cream cap pass every test and still leave the top of the cup looking empty —
+   * and worse, on a bright drink like matcha the lift below used to *reach* for
+   * `under + FOAM_CONTRAST`, which is brighter than the page, so satisfying the
+   * liquid actively destroyed the cap against the background.
+   *
+   * So brightness is capped here, and the foam gets as far from the liquid as it
+   * can underneath that cap. A smaller gap to the liquid is the right trade: a cream
+   * cap on a green drink is already unmistakable on hue, which `apart` allows for.
+   */
+  const ceiling = luma(COLORS.bg) - BACKDROP_CONTRAST;
+  const tooPale = luma(nominal) > ceiling && distance(nominal, COLORS.bg) < BACKDROP_DISTANCE;
+  const foam = tooPale ? deepen(nominal, ceiling) : nominal;
 
-  return withLuma(foam, Math.max(under - FOAM_CONTRAST, 70));
+  if (apart(foam)) return foam;
+
+  // Room left to lift, but never past the ceiling.
+  const lifted = withLuma(foam, Math.min(ceiling, under + FOAM_CONTRAST));
+  if (apart(lifted)) return lifted;
+
+  // The liquid is brighter than the page will let the foam be, so there is no room
+  // above it at all and the cap has to go below instead. No current base is pale
+  // enough to reach this — it guards a future milk-forward one.
+  if (under >= ceiling) return deepen(nominal, Math.max(under - FOAM_CONTRAST, 70));
+
+  /*
+   * Otherwise take the best separation the ceiling allows, and accept that it is
+   * under FOAM_CONTRAST.
+   *
+   * Some pairings are inherently low contrast — matcha foam on a matcha, pistachio
+   * foam on a matcha — and a pale green cap on bright green is exactly what those
+   * look like in the photographs. Insisting on the full gap sent them out the dark
+   * side of this function instead, which turned the cap olive and read as a
+   * different drink rather than as foam. A cap that is too subtle is a worse render;
+   * a cap that is the wrong colour is a wrong drink.
+   */
+  return lifted;
 }
 
 /**

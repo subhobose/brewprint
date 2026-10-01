@@ -152,11 +152,48 @@ guard rarely fired when it should have. The target is `FOAM_CONTRAST` = 80 luma,
 references that read 193–233 over liquid at 76–168, a gap of 66–129. Half that is what made the cap
 look washed into the drink.
 
-Distinctness is satisfied by **either** a big luminance gap **or** a big colour distance. A strongly
-hued foam reads apart on colour alone — ube over bright matcha is unmistakable at almost the same
-brightness (gap −15, distance 198) — while a pale cream has only brightness to work with. Lifting
-can also hit the ceiling on a bright drink, since channels clamp at 255; when it does, the foam is
-dropped instead and reads as a deeper cap.
+Distinctness is satisfied by **either** a big luminance gap **or** a big colour distance
+(`FOAM_DISTANCE` = 150). A strongly hued foam reads apart on colour alone — ube over bright matcha is
+unmistakable at almost the same brightness (gap −17, distance 192) — while a pale cream has only
+brightness to work with.
+
+**The foam has two neighbours, and the page is the other one.** The glass is clear, so a pale cap is
+also seen against `COLORS.bg`, and that background is cream at luma 242 — *brighter than real cold
+foam*, which photographs at 193–233. Sweet cream `#FCF4E4` is 245 and sits 6.6 from the page in RGB,
+which is to say identical; it vanished. So `foamColor` imposes a **ceiling** of
+`luma(COLORS.bg) − BACKDROP_CONTRAST` (28), and that ceiling wins over the contrast target. The only
+direction with room in it is down, which is also the truthful one: dairy foam is creamier than paper,
+not brighter.
+
+The ceiling has to be enforced *inside* the contrast guard rather than before it. A first attempt
+deepened the foam first and then ran the old guard, which on a bright matcha lifted it straight back
+to `under + 80` — brighter than the page — so satisfying the liquid actively destroyed the cap
+against the background. The lift is now clamped to the ceiling.
+
+When neither direction reaches `FOAM_CONTRAST` under the ceiling, the foam takes the **best
+separation available** rather than jumping below the liquid. Some pairings are inherently low
+contrast — matcha foam on a matcha, pistachio foam on a matcha — and a pale green cap on bright green
+is what those look like in the photographs. Demanding the full gap sent them out the dark side and
+turned the cap olive: a cap that is too subtle is a worse render, but a cap that is the wrong colour
+is a wrong drink. The dark branch survives for a liquid brighter than the ceiling itself, which no
+current base reaches.
+
+Deepening goes `withLuma` → `saturate` → `withLuma`. Saturating first pushes bright channels past 255
+where they clamp, and clamping is what flattens the hue, so the colour comes back less warm than it
+went in. The closing rescale is a uniform multiply, so it pins the target exactly while keeping the
+ratios `saturate` established.
+
+**A deepened cap needs a chroma floor, not just a proportional lift.** `withLuma` is a uniform
+multiply, so it preserves chroma *in proportion* — and a third more of nearly nothing is still nearly
+nothing. Sweet cream starts at a channel spread of 24, so taking it to the ceiling with only
+`FOAM_CHROMA` (0.35) produced `#ded5c2`: correctly legible, and grey. `deepen` therefore takes the
+larger of the proportional gain and whatever reaches `FOAM_CHROMA_FLOOR` (46), which puts sweet cream
+at `#e3d5b6` — beige. It is a floor rather than a target on purpose: vanilla already carries 62 and
+keeps it, so the two stay distinguishable instead of collapsing onto one cream.
+
+This is why `COLORS` lives in `theme.ts` and not `ui.tsx`: `coffee.ts` needs the page colour, and it
+is a pure model module with no React in it — it gets compiled and run under plain Node to check the
+colour maths. `ui.tsx` re-exports `COLORS` so `import { COLORS } from '../ui'` still works.
 
 **A cast shadow.** `DrinkBody` takes a `shadow` flag and lays a short dark gradient across the top of
 the drink. This is the cue that reads as *a solid object resting on liquid* rather than two coloured
@@ -639,8 +676,21 @@ index.tsx (opening pour) ──replace──> home.tsx
 
 `index.tsx` is the opening screen, not the home screen. Its loading animation is `LiquidCup`
 pouring a real recipe rather than a separate loader, so the first thing a guest sees is the
-thing the app does. It steps through four café status lines and `router.replace`s to `/home`,
-so it never sits in the back stack. Total run is about 2.8 seconds.
+thing the app does. It steps through three café status lines and `router.replace`s to `/home`,
+so it never sits in the back stack. Total run is about 2.6 seconds.
+
+The recipe is the **ube matcha from the trending shelf** — the same recipe object's worth of fields,
+so the first cup a guest sees is a drink they can then go and order. It is chosen for recognition:
+purple foam on green reads as a specific drink at a glance, where a brown cup on the warm `COLORS.bg`
+background reads as a cup of something. It is also the one cap that needs no correction to clear the
+page — ube is 128 away from `COLORS.bg` in RGB, so the backdrop guard leaves it alone.
+
+It is the menu tile's recipe exactly, ice included. An earlier version dropped the ice on the theory
+that cubes moving under a pouring cup and cycling text was too much at once — wrong about the motion:
+`Ice` shifts a cube 2.2pt and turns it 4°, well under the wave already running on the surface. An
+iced drink with no ice in it is the stranger thing to look at.
+
+The status lines narrate *that* drink, so changing the recipe means changing `LINES` too.
 
 ### Tile consistency
 
@@ -672,20 +722,40 @@ plain links — serialising the recipe into URL params on every tweak was the al
 it buys nothing.
 
 `drink.tsx` sizes the cup from `useWindowDimensions` minus the safe-area insets, the header,
-and the collapsed sheet, so the cup fills as much of the screen as is left. The sheet
-animates its own height between a 104pt peek and 62% of the screen.
+and the collapsed sheet, so the cup fills as much of the screen as is left. The sheet animates
+its own height between the peek and `sheetMax`.
+
+**Open, the sheet covers the whole stage.** `sheetMax` is `height − insets.top − HEADER_H −
+SHEET_TOP_GAP`, so its top edge lands 10pt under the header — above the cup's rim on every
+device, since `cup.ts` leaves `h × 0.03 + lipRy + 6` of headroom above it. The previous cap of
+62% of the screen left the cup half visible behind the controls, which read as neither the
+drink nor the menu. The header stays out from under it deliberately: it carries the drink's
+name and recipe line, which is the only text identifying what you are editing.
+
+`SHEET_PEEK` (104) is the height of the peek's **content**, so `insets.bottom` is added to it
+rather than subtracted from it. Taking the home indicator out of the 104 left the "Ask the
+barista" button clipped by the sheet's `overflow: hidden` on every device with one.
 
 ### The live preview
 
-An expanded sheet hides most of the hero cup, which is exactly when the guest is editing and
-most wants to see it. `LivePreview` (local to `drink.tsx`) is a 58pt `DrinkRender` in a
-floating card that rides just above the sheet's top edge, driven off the same `sheet` shared
-value so it rises with it and fades in as it opens.
+A covered hero cup is exactly when the guest is editing and most wants to see the drink, so
+`LivePreview` (local to `drink.tsx`) is the only cup on screen while the sheet is open — it is
+what makes a chip tap visible at all, not a convenience.
 
-It reads the same `Recipe` as the hero cup, so the two cannot drift. It also pops in scale on
-every recipe change, which is what acknowledges a chip tap while the big cup is covered. The
-hero cup was already live — it re-renders and sloshes on each change — so nothing extra is
-needed to "apply" edits when the sheet closes.
+It is a 44pt `DrinkRender` in a floating card, pinned to the **top of the sheet** and the last
+child of it, so the controls scroll underneath. It used to ride above the sheet's top edge;
+a full-height sheet pushes that position off the screen, which is why it moved inside.
+
+Its box is arithmetic, not a measurement: `PREVIEW_H` is built from the cup's 250×380 viewBox
+and an explicit `lineHeight` on the label, and `CONTROLS_TOP` is derived from it and `GRAB_H`
+so the first control row clears the card by 10pt. Those constants are load-bearing — change
+the card and `CONTROLS_TOP` has to follow, or the first row hides behind it.
+
+It reads the same `Recipe` object as the hero cup, so the two cannot drift. It also pops in
+scale on every change, keyed on `recipeLine`. That key is checked rather than assumed: across
+140 single-field edits there is no change the cup draws that `recipeLine` leaves out. The hero
+cup was already live — it re-renders and sloshes on each change — so nothing extra is needed to
+"apply" edits when the sheet closes.
 
 ## Commands
 

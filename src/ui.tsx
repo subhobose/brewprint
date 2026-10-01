@@ -3,14 +3,11 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-export const COLORS = {
-  bg: '#F7F1E7',
-  card: '#FFFFFF',
-  ink: '#2B1E14',
-  inkSoft: '#7A6654',
-  accent: '#8A5223',
-  line: '#E4D8C7',
-};
+import { COLORS } from './theme';
+
+// The palette itself lives in theme.ts, which has no React in it, so coffee.ts can
+// read the page colour. Re-exported here because every screen imports it from ui.
+export { COLORS };
 
 export function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (

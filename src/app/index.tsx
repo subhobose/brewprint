@@ -18,25 +18,36 @@ import LiquidCup from '../LiquidCup';
 import { Recipe } from '../coffee';
 import { COLORS } from '../ui';
 
-/** Café noises, in the order a drink actually gets made. */
-const LINES = ['Grinding the beans', 'Steaming the milk', 'Ready when you are'];
+/** Café noises, in the order this drink actually gets made. */
+const LINES = ['Whisking the matcha', 'Spooning the ube foam', 'Ready when you are'];
 
 /**
- * No ice on purpose. Ten cubes bobbing while the cup pours and the text cycles is
- * too much happening at once on a loading screen — the pour should be the only
- * thing moving.
+ * The ube matcha off the trending shelf — same recipe, so the first cup a guest
+ * sees is a drink they can then go and order.
+ *
+ * Purple foam on green is the most recognisable thing in the range, and it is the
+ * one cap that needs no help to read against a cream page: every pale foam has to
+ * be deepened to clear `COLORS.bg` (see `foamColor`), and ube clears it on hue by
+ * a distance of 128.
+ *
+ * Light ice, like the tile — so this is the menu drink exactly, with nothing to
+ * explain away. An earlier version ran it with no ice at all, on the theory that
+ * cubes moving under a pouring cup and cycling text was too much at once; that was
+ * wrong about the motion. `Ice` shifts a cube 2.2pt and turns it 4°, well under
+ * the wave already running on the surface, and an iced drink with no ice in it is
+ * a stranger thing for a guest to look at.
  */
 const HERO: Recipe = {
-  base: 'coldbrew',
+  base: 'matcha',
   size: 16,
   iced: true,
   shots: 0,
-  milk: 'oat',
-  syrup: 'caramel',
-  pumps: 3,
+  milk: 'almond',
+  syrup: 'none',
+  pumps: 1,
   coldFoam: true,
-  foam: 'sweetcream',
-  ice: 'none',
+  foam: 'ube',
+  ice: 'light',
 };
 
 export default function Splash() {
